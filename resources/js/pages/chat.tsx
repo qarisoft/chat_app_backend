@@ -292,7 +292,7 @@ export default function Chat() {
                                 </div>
                             </div>
                             
-                            <div className="flex-1 p-4 overflow-y-auto overflow-auto 0bg-slate-50/50 bg-amber-600 dark:bg-slate-900/10">
+                            <div className="flex-1 p-4 overflow-y-auto overflow-auto 0bg-slate-50/50  dark:bg-slate-900/10">
                                 <div className="space-y-4 max-w-3xl mx-auto ">
                                     {messages.map((msg, idx) => {
                                         const isMe = msg.user_id === currentUser.id;
