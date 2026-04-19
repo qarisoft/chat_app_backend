@@ -95,7 +95,7 @@ class ChatController extends Controller
     {
         $user = $request->user();
 
-        $conversations = $user->conversations()
+        $conversations = $user->conversations()->latest()
             ->with(['users:id,name,email', 'latestMessage.user:id,name'])
             ->get()
             ->map(function (Conversation $conv) use ($user) {
@@ -116,7 +116,7 @@ class ChatController extends Controller
                     'unread_count'   => $conv->unreadCountFor($user),
                 ];
             })
-            ->sortByDesc(fn($c) => $c['latest_message']['created_at'] ?? '')
+            // ->sortByDesc(fn($c) => $c['latest_message']['created_at'] ?? '')
             ->values();
 
         return response()->json($conversations);

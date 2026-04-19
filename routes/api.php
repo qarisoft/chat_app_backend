@@ -4,9 +4,15 @@ use App\Http\Controllers\ChatController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
+use Illuminate\Support\Facades\Broadcast;
+
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
+
+// Register broadcasting auth route for Reverb/Pusher
+Broadcast::routes(['middleware' => ['auth:sanctum']]);
+
 // Public auth routes
 Route::post('/register', [ChatController::class, 'register']);
 Route::post('/login', [ChatController::class, 'login']);

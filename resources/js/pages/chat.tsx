@@ -19,7 +19,9 @@ export default function Chat() {
     const [newMessage, setNewMessage] = useState('');
     const [typingUsers, setTypingUsers] = useState<{ [userId: number]: { name: string, timeout: any } }>({});
     const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+    const [globalOnlineUsers, setGlobalOnlineUsers] = useState<any[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const isFirstLoadRef = useRef(true);
     const lastTypedRef = useRef<number>(0);
 
     const fetchConversations = () => {
@@ -44,11 +46,12 @@ export default function Chat() {
     // Fetch messages when conversation changes
     useEffect(() => {
         if (activeConversation) {
+            isFirstLoadRef.current = true;
             fetch(`/api/chat/conversations/${activeConversation.id}/messages`, { headers: { 'Accept': 'application/json' } })
                 .then(res => res.json())
                 .then(data => {
                     if (data && data.data) {
-                        setMessages(data.data.reverse()); // paginated is desc, reverse to asc
+                        setMessages(data.data); // paginated is desc, reverse to asc
                     }
                 });
         } else {
@@ -58,7 +61,12 @@ export default function Chat() {
 
     // Auto-scroll to bottom
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (messages.length > 0) {
+            messagesEndRef.current?.scrollIntoView({ 
+                behavior: isFirstLoadRef.current ? 'auto' : 'smooth' 
+            });
+            isFirstLoadRef.current = false;
+        }
     }, [messages]);
 
     // Real-time listener for current conversation
@@ -136,6 +144,7 @@ export default function Chat() {
         const instance = echo();
         const userChannelName = `App.Models.User.${currentUser.id}`;
 
+        // Listen for notifications
         instance.private(userChannelName)
             .listen('.conversation.started', () => {
                 fetchConversations();
@@ -144,8 +153,15 @@ export default function Chat() {
                 fetchConversations();
             });
 
+        // Track global online status
+        instance.join('online')
+            .here((users: any[]) => setGlobalOnlineUsers(users))
+            .joining((user: any) => setGlobalOnlineUsers(prev => [...prev, user]))
+            .leaving((user: any) => setGlobalOnlineUsers(prev => prev.filter(u => u.id !== user.id)));
+
         return () => {
             instance.leave(userChannelName);
+            instance.leave('online');
         };
     }, [currentUser]);
 
@@ -209,7 +225,7 @@ export default function Chat() {
     return (
         <>
             <Head title="Chat" />
-            <div className="flex h-[calc(100vh-theme(spacing.20))] md:h-[calc(100vh-theme(spacing.16))] flex-1 gap-4 p-4 overflow-hidden">
+            <div className="flex h-[calc(100vh-(--spacing(20)))] md:h-[calc(100vh-(--spacing(16)))] max-h-[90vh] flex-1 gap-4 p-4 overflow-hidden">
                 {/* Left Sidebar */}
                 <div className="flex flex-col w-full md:w-80 bg-background border rounded-xl overflow-hidden shadow-sm shrink-0">
                     <div className="p-4 border-b bg-muted/30">
@@ -218,31 +234,36 @@ export default function Chat() {
                     <div className="flex-1 overflow-y-auto">
                         <div className="p-2 space-y-1">
                             {conversations.map(conv => (
-                                <button
-                                    key={conv.id}
-                                    onClick={() => setActiveConversation(conv)}
-                                    className={`w-full flex items-center gap-3 p-3 text-left rounded-lg transition-colors ${activeConversation?.id === conv.id ? 'bg-primary text-primary-foreground shadow-md' : 'hover:bg-muted/60'}`}
-                                >
-                                    <Avatar className={`h-11 w-11 border-2 ${activeConversation?.id === conv.id ? 'border-primary-foreground/30' : 'border-background shadow-sm'}`}>
-                                        <AvatarFallback className={activeConversation?.id === conv.id ? 'text-primary' : 'bg-primary/10 text-primary'}>
-                                            {conv.name?.[0]?.toUpperCase() || 'U'}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <div className="flex-1 overflow-hidden">
-                                        <div className="font-medium truncate">{conv.name || 'Chat'}</div>
-                                        <div className={`text-xs truncate mt-0.5 ${activeConversation?.id === conv.id ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
-                                            {conv.latest_message ? conv.latest_message.body : 'No messages yet'}
+                                    <button
+                                        key={conv.id}
+                                        onClick={() => setActiveConversation(conv)}
+                                        className={`w-full flex items-center gap-3 p-3 text-left rounded-lg transition-colors ${activeConversation?.id === conv.id ? 'bg-primary text-primary-foreground shadow-md' : 'hover:bg-muted/60'}`}
+                                    >
+                                        <div className="relative">
+                                            <Avatar className={`h-11 w-11 border-2 ${activeConversation?.id === conv.id ? 'border-primary-foreground/30' : 'border-background shadow-sm'}`}>
+                                                <AvatarFallback className={activeConversation?.id === conv.id ? 'text-primary' : 'bg-primary/10 text-primary'}>
+                                                    {conv.name?.[0]?.toUpperCase() || 'U'}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            {globalOnlineUsers.some(u => conv.users.some((cu: any) => cu.id === u.id && cu.id !== currentUser.id)) && (
+                                                <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-green-500 border-2 border-background" title="Online" />
+                                            )}
                                         </div>
-                                    </div>
-                                    {conv.unread_count > 0 && (
-                                        <div className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${activeConversation?.id === conv.id ? 'bg-primary-foreground text-primary' : 'bg-primary text-primary-foreground'}`}>
-                                            {conv.unread_count}
+                                        <div className="flex-1 overflow-hidden">
+                                            <div className="font-medium truncate">{conv.name || 'Chat'}</div>
+                                            <div className={`text-xs truncate mt-0.5 ${activeConversation?.id === conv.id ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                                                {conv.latest_message ? conv.latest_message.body : 'No messages yet'}
+                                            </div>
                                         </div>
-                                    )}
-                                </button>
+                                        {conv.unread_count > 0 && (
+                                            <div className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${activeConversation?.id === conv.id ? 'bg-primary-foreground text-primary' : 'bg-primary text-primary-foreground'}`}>
+                                                {conv.unread_count}
+                                            </div>
+                                        )}
+                                    </button>
                             ))}
                             {conversations.length === 0 && (
-                                <div className="p-8 flex flex-col items-center justify-center text-center text-muted-foreground">
+                                <div className="p-8 flex flex-col bg--600 items-center justify-center text-center text-muted-foreground">
                                     <MessageSquare className="h-8 w-8 mb-3 opacity-20" />
                                     <p className="text-sm">No conversations yet.</p>
                                 </div>
@@ -271,8 +292,8 @@ export default function Chat() {
                                 </div>
                             </div>
                             
-                            <div className="flex-1 p-4 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/10">
-                                <div className="space-y-4 max-w-3xl mx-auto">
+                            <div className="flex-1 p-4 overflow-y-auto overflow-auto 0bg-slate-50/50 bg-amber-600 dark:bg-slate-900/10">
+                                <div className="space-y-4 max-w-3xl mx-auto ">
                                     {messages.map((msg, idx) => {
                                         const isMe = msg.user_id === currentUser.id;
                                         return (

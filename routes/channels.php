@@ -33,3 +33,7 @@ Broadcast::channel('conversation.{conversationId}', function (User $user, int $c
 
     return false;
 });
+
+Broadcast::channel('online', function ($user) {
+    return ['id' => $user->id, 'name' => $user->name];
+});
